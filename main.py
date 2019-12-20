@@ -8,10 +8,10 @@ A = lambda t: np.array([[1j, 2 + 1j - np.cos(2 * np.pi * t)], [-2 + 1j + np.cos(
 y0 = np.array([1.,1.]) / np.sqrt(2.)
 #y0 = np.array([1., 0.])
 
-T = 10.
-tau = 0.1
+T = 1.
+tau = 0.01
 
-mi = MagnusIntegrator(A)
+mi = MagnusIntegrator(A, order=4)
 
 ts, ys = mi.evolve(y0, T, tau)
 
