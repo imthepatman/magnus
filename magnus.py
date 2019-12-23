@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.integrate as integrate
 from scipy.linalg import expm
-from scipy.special import bernoulli, factorial
+from scipy.special import bernoulli, factorial, roots_legendre
 import itertools as it
 
 sig_x = np.array([[0., 1.], [1., 0.]])
@@ -33,6 +33,7 @@ def get_example(id='std', **kwargs):
 
 class MagnusIntegrator:
     def __init__(self, order=2, qf='simpson'):
+        #to have gauss Legendre of order n, type qf = 'gln', e.g. 'gl4'
         self.order = order
         self.qf = qf
 
@@ -137,8 +138,18 @@ class MagnusIntegrator:
             tm = (self.t0 + t)/2.
             res = dt/6. * (f(self.t0, **kwargs) + 4. * f(tm, **kwargs) + f(t, **kwargs))
 
-        return res
+        elif self.qf[0:2] == 'gl': #gauss legendre
+            a = self.t0
+            b = t
+            res = 0
+            n = int(self.qf[-1]) #take the order of Gauss Legendre quadr. formula
+            x,w = roots_legendre(n) 
+            for i in range(0,n):
+                res +=  w[i] * f( ((b-a)/2)*x[i] + (b+a)/2, **kwargs)
+            res = res*(b-a)/2
 
+        return res
+    
     def t_braket(self, phi, psi_t):
         return np.einsum('i, ni->n', np.conj(phi), psi_t)
 
