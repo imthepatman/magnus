@@ -5,15 +5,16 @@ import matplotlib.pyplot as plt
 
 T = 10.
 tau = 0.01
-id = 'rect'
+id = 'rz'
 
 A, y0 = get_example(id)
 
-mi = MagnusIntegrator(A, order=4)
+mi = MagnusIntegrator(order=2)
 
-ts, ys = mi.evolve(y0, T, tau)
+ts, ys = mi.evolve(A, y0, T, tau)
 
 y_test = np.array([1., -1.]) / np.sqrt(2.)
+y_test = np.array([0., 1.])
 tp = np.abs(mi.t_braket(y_test, ys))
 
 fig = plt.figure(figsize=(9, 6))
