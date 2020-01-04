@@ -8,27 +8,39 @@ sig_x = np.array([[0., 1.], [1., 0.]])
 sig_y = np.array([[0., -1.j], [1.j, 0.]])
 sig_z = np.array([[1., 0.], [0., -1.]])
 
+
 def get_example(id='std', **kwargs):
     if id == 'std':
-        H = lambda t: 1.j*np.array([[1j, 2 + 1j - np.cos(2 * np.pi * t)], [-2 + 1j + np.cos(2 * np.pi * t), 3 * 1j]])
+        H = lambda t: 1.j * np.array([[1j, 2 + 1j - np.cos(2 * np.pi * t)], [-2 + 1j + np.cos(2 * np.pi * t), 3 * 1j]])
         y0 = np.array([1., 1.]) / np.sqrt(2.)
     elif id == 'rect':
         om = kwargs.get('om', 1.)
         V0 = kwargs.get('V0', 1.)
 
-        f = lambda t: 1. if t>=0. else 0.
-        H = lambda t: 0.5*om*sig_z + V0*f(t)*sig_x
+        f = lambda t: 1. if t >= 0. else 0.
+        H = lambda t: 0.5 * om * sig_z + V0 * f(t) * sig_x
         y0 = np.array([0., 1.])
+        p_ex = None
 
-    elif id=='rz':
-        V0 = 1./np.pi
-        T = 1.
-        V = lambda t: V0/np.cosh(t)
-        H = lambda t: V(t)*(sig_x * np.cos(t) - sig_y*np.sin(t))
-        y0 = np.array([1., 0.])
+    elif id == 'rz':
+        om = kwargs.get('om', 1.)
+        V0 = kwargs.get('V0', 1.)
 
-    A = lambda t: -1.j*H(t)
-    return A, y0
+        V = lambda t: V0  # V0/np.cosh(t)
+        H = lambda t: V(t) * (sig_x * np.cos(om * t) - sig_y * np.sin(om * t))
+        y0 = np.array([0., 1.])
+        p_ex = lambda t: 4. / (4. + (om / V0) ** 2) * np.sin(np.sqrt(V0 ** 2 + om ** 2 / 4.) * t) ** 2
+
+    A = lambda t: -1.j * H(t)
+    return A, y0, p_ex
+
+
+def magnus_ana(t, om, V0):
+    Om_1 = -1j * V0 / om * (sig_x * np.sin(om * t) + sig_y * (1. - np.cos(om * t)))
+
+    Om = Om_1
+    U = expm(Om)
+    return U, Om
 
 
 class MagnusIntegrator:
@@ -50,8 +62,19 @@ class MagnusIntegrator:
         Om = self.fOmega(t_e, n=1)
         for n in range(2, self.order + 1):
             Om_n = self.fOmega(t_e, n=n)
-            print('n', n, 'Om', Om_n)
+            # print('n', n, 'Om', Om_n)
             Om += Om_n
+
+        # explicit computation for first terms
+
+        # Om_1 = self.quad(self.A, t_e)
+        # Om = Om_1
+        # if self.order > 1:
+        #
+        #     Omp_2 = lambda t1: 0.5 * self.comm(self.A(t1), self.quad(self.A, t1))
+        #     Om_2 = self.quad(Omp_2, t_e)
+        #
+        #     Om += Om_2
 
         return Om
 
@@ -73,12 +96,13 @@ class MagnusIntegrator:
 
     def fOmega(self, s, n=1):
         if n < 2:
+            # TODO check why quadrature yield different results than analytical expression
             Om_1 = self.quad(self.A, s)
             return Om_1
         else:
             Om_n = self.quad(self.fOmega_p, s, n=n)
-            #Om_n = 0.
-            #for j in range(1, n):
+            # Om_n = 0.
+            # for j in range(1, n):
             #    Om_n+= self.b_n[j] / self.fac_n[j]*self.quad(self.S, s, n=n, j=j)
             return Om_n
 
@@ -126,17 +150,21 @@ class MagnusIntegrator:
         return k_js
 
     def comm(self, M1, M2):
-        return M1 @ M2 - M2 @ M1
+        c = M1 @ M2 - M2 @ M1
+        return c
 
     def quad(self, f, t, **kwargs):
         dt = t - self.t0
+        tm = (t + self.t0) / 2.
         if self.qf == 'midpoint':
             dt = t - self.t0
             res = f(self.t0 + dt / 2., **kwargs) * dt
 
         elif self.qf == 'simpson':
-            tm = (self.t0 + t)/2.
-            res = dt/6. * (f(self.t0, **kwargs) + 4. * f(tm, **kwargs) + f(t, **kwargs))
+            res = dt / 6. * (f(self.t0, **kwargs) + 4. * f(tm, **kwargs) + f(t, **kwargs))
+        elif self.qf == 'gauss2':
+            xi = [-np.sqrt(3.), np.sqrt(3.)]
+            res = dt / 2. * (f(tm + dt / 2. * xi[0], **kwargs) + f(tm + dt / 2. * xi[1], **kwargs))
 
         elif self.qf[0:2] == 'gl': #gauss legendre
             a = self.t0
@@ -152,6 +180,7 @@ class MagnusIntegrator:
     
     def t_braket(self, phi, psi_t):
         return np.einsum('i, ni->n', np.conj(phi), psi_t)
+
 
 def braket(phi, psi):
     return np.sum(np.conj(phi) * psi, axis=-1)
