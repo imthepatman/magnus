@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-T = 10.
+T = 1.
 tau = 0.01
 id = 'rz'
 

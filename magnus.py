@@ -17,22 +17,24 @@ def get_example(id='std', **kwargs):
         om = kwargs.get('om', 1.)
         V0 = kwargs.get('V0', 1.)
 
-        f = lambda t: 1. if t >= 0. else 0.
-        H = lambda t: 0.5 * om * sig_z + V0 * f(t) * sig_x
+        V = lambda t: V0
+        H = lambda t: V(t) * (sig_x * np.cos(om * t) - sig_y * np.sin(om * t))
         y0 = np.array([0., 1.])
-        p_ex = None
+        p_ex = lambda t: 4. / (4. + (om / V0) ** 2) * np.sin(np.sqrt(V0 ** 2 + om ** 2 / 4.) * t) ** 2
+        pm1 = lambda t: np.sin(2.*V0/om * np.sin(om/2.*t))**2
 
     elif id == 'rz':
         om = kwargs.get('om', 1.)
         V0 = kwargs.get('V0', 1.)
 
-        V = lambda t: V0  # V0/np.cosh(t)
-        H = lambda t: V(t) * (sig_x * np.cos(om * t) - sig_y * np.sin(om * t))
+        V = lambda t: V0/np.cosh(t)
+        H = lambda t: V(t) * (sig_x * np.cos(np.pi*om * t) - sig_y * np.sin(np.pi*om * t))
         y0 = np.array([0., 1.])
-        p_ex = lambda t: 4. / (4. + (om / V0) ** 2) * np.sin(np.sqrt(V0 ** 2 + om ** 2 / 4.) * t) ** 2
+        p_ex = lambda t: np.sin(V0 * t)**2/np.cosh(np.pi*om*t/2.)**2
+        pm1 = lambda t: np.sin(V0*t/np.cosh(np.pi*om*t/2.))**2
 
     A = lambda t: -1.j * H(t)
-    return A, y0, p_ex
+    return A, y0, p_ex, pm1
 
 
 def magnus_ana(t, om, V0):
@@ -44,7 +46,7 @@ def magnus_ana(t, om, V0):
 
 
 class MagnusIntegrator:
-    def __init__(self, order=2, qf='simpson'):
+    def __init__(self, order=2, qf='midpoint'):
         #to have gauss Legendre of order n, type qf = 'gln', e.g. 'gl4'
         self.order = order
         self.qf = qf
@@ -87,9 +89,14 @@ class MagnusIntegrator:
 
         ys = np.zeros((len(ts), len(y0)), dtype=np.complex)
         ys[0] = y0
+        Om_tot = 0.
         for n in range(1, len(ts)):
-            ys[n] = expm(self.Omega(ts[n - 1], ts[n])) @ ys[n - 1]
-
+            Om_tot += self.Omega(ts[n - 1], ts[n])
+            #ys[n] = expm(self.Omega(ts[n - 1], ts[n])) @ ys[n - 1]
+        #    ys[n] = expm((ts[n] - ts[n-1])*self.A(ts[n-1])) @ ys[n - 1]
+        #print(ts)
+        #self.t0 = 0.
+        ys[-1] = expm(Om_tot) @ y0
         return ts, ys
 
     ### Auxiliary functions ###
@@ -157,7 +164,6 @@ class MagnusIntegrator:
         dt = t - self.t0
         tm = (t + self.t0) / 2.
         if self.qf == 'midpoint':
-            dt = t - self.t0
             res = f(self.t0 + dt / 2., **kwargs) * dt
 
         elif self.qf == 'simpson':
