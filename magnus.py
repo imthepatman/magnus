@@ -21,17 +21,17 @@ def get_example(id='std', **kwargs):
         H = lambda t: V(t) * (sig_x * np.cos(om * t) - sig_y * np.sin(om * t))
         y0 = np.array([0., 1.])
         p_ex = lambda t: 4. / (4. + (om / V0) ** 2) * np.sin(np.sqrt(V0 ** 2 + om ** 2 / 4.) * t) ** 2
-        pm1 = lambda t: np.sin(2.*V0/om * np.sin(om/2.*t))**2
+        pm1 = lambda t: np.sin(2. * V0 / om * np.sin(om / 2. * t)) ** 2 if om != 0. else np.sin(V0) ** 2
 
     elif id == 'rz':
         om = kwargs.get('om', 1.)
-        V0 = kwargs.get('V0', 1.)
+        V0 = kwargs.get('V0', 1.5)
 
-        V = lambda t: V0/np.cosh(t)
+        V = lambda t: V0 / np.cosh(t)
         H = lambda t: V(t) * (sig_x * np.cos(np.pi*om * t) - sig_y * np.sin(np.pi*om * t))
         y0 = np.array([0., 1.])
-        p_ex = lambda t: np.sin(V0 * t)**2/np.cosh(np.pi*om*t/2.)**2
-        pm1 = lambda t: np.sin(V0*t/np.cosh(np.pi*om*t/2.))**2
+        p_ex = lambda t: np.sin(V0 * t) ** 2 / np.cosh(np.pi * om * t / 2.) ** 2
+        pm1 = lambda t: np.sin(V0 * t / np.cosh(np.pi * om * t / 2.)) ** 2
 
     A = lambda t: -1.j * H(t)
     return A, y0, p_ex, pm1
@@ -47,7 +47,7 @@ def magnus_ana(t, om, V0):
 
 class MagnusIntegrator:
     def __init__(self, order=2, qf='midpoint'):
-        #to have gauss Legendre of order n, type qf = 'gln', e.g. 'gl4'
+        # to have gauss Legendre of order n, type qf = 'gln', e.g. 'gl4'
         self.order = order
         self.qf = qf
 
@@ -59,58 +59,31 @@ class MagnusIntegrator:
             for j in range(1, n):
                 self.ks['{}_{}'.format(n, j)] = self.gen_ks(n, j)
 
-    def Omega(self, t_s, t_e):
-        self.t0 = t_s
-        Om = self.fOmega(t_e, n=1)
+    def Omega(self):
+        Om = self.fOmega(self.T, n=1)
         for n in range(2, self.order + 1):
-            Om_n = self.fOmega(t_e, n=n)
-            # print('n', n, 'Om', Om_n)
+            Om_n = self.fOmega(self.T, n=n)
             Om += Om_n
-
-        # explicit computation for first terms
-
-        # Om_1 = self.quad(self.A, t_e)
-        # Om = Om_1
-        # if self.order > 1:
-        #
-        #     Omp_2 = lambda t1: 0.5 * self.comm(self.A(t1), self.quad(self.A, t1))
-        #     Om_2 = self.quad(Omp_2, t_e)
-        #
-        #     Om += Om_2
 
         return Om
 
-    def evolve(self, A, y0, T, tau=0.01):
+    def evolve(self, A, y0, T, tau=0.01, t0=0.):
         self.A = A
-        Nt = int(T / tau)
-        ts = np.arange(0, Nt + 1) * tau
-        if Nt * tau < T:
-            ts = np.append(ts, T)
+        self.t0 = t0
+        self.T = T
+        self.tau = tau
 
-        ys = np.zeros((len(ts), len(y0)), dtype=np.complex)
-        ys[0] = y0
-        Om_tot = 0.
-        for n in range(1, len(ts)):
-            Om_tot += self.Omega(ts[n - 1], ts[n])
-            #ys[n] = expm(self.Omega(ts[n - 1], ts[n])) @ ys[n - 1]
-        #    ys[n] = expm((ts[n] - ts[n-1])*self.A(ts[n-1])) @ ys[n - 1]
-        #print(ts)
-        #self.t0 = 0.
-        ys[-1] = expm(Om_tot) @ y0
-        return ts, ys
+        y_next = expm(self.Omega()) @ y0
+        return y_next
 
     ### Auxiliary functions ###
 
     def fOmega(self, s, n=1):
         if n < 2:
-            # TODO check why quadrature yield different results than analytical expression
             Om_1 = self.quad(self.A, s)
             return Om_1
         else:
             Om_n = self.quad(self.fOmega_p, s, n=n)
-            # Om_n = 0.
-            # for j in range(1, n):
-            #    Om_n+= self.b_n[j] / self.fac_n[j]*self.quad(self.S, s, n=n, j=j)
             return Om_n
 
     def fOmega_p(self, s, n=2):
@@ -160,30 +133,35 @@ class MagnusIntegrator:
         c = M1 @ M2 - M2 @ M1
         return c
 
-    def quad(self, f, t, **kwargs):
-        dt = t - self.t0
-        tm = (t + self.t0) / 2.
-        if self.qf == 'midpoint':
-            res = f(self.t0 + dt / 2., **kwargs) * dt
+    def quad(self, f, T, **kwargs):
 
-        elif self.qf == 'simpson':
-            res = dt / 6. * (f(self.t0, **kwargs) + 4. * f(tm, **kwargs) + f(t, **kwargs))
-        elif self.qf == 'gauss2':
-            xi = [-np.sqrt(3.), np.sqrt(3.)]
-            res = dt / 2. * (f(tm + dt / 2. * xi[0], **kwargs) + f(tm + dt / 2. * xi[1], **kwargs))
+        Nt = int((T - self.t0) / self.tau)
+        ts = np.linspace(self.t0, T, Nt, endpoint=True)
 
-        elif self.qf[0:2] == 'gl': #gauss legendre
-            a = self.t0
-            b = t
-            res = 0
-            n = int(self.qf[-1]) #take the order of Gauss Legendre quadr. formula
-            x,w = roots_legendre(n) 
-            for i in range(0,n):
-                res +=  w[i] * f( ((b-a)/2)*x[i] + (b+a)/2, **kwargs)
-            res = res*(b-a)/2
+        res = np.zeros_like(self.A(0.))
+        for i in range(1, len(ts)):
+            t_start = ts[i - 1]
+            t_end = ts[i]
+            t_mid = (t_end + t_start) / 2.
+            dt = t_end - t_start
+
+            if self.qf == 'midpoint':
+                res += f(t_start + dt / 2., **kwargs) * dt
+
+            elif self.qf == 'simpson':
+                res += dt / 6. * (f(t_start, **kwargs) + 4. * f(t_mid, **kwargs) + f(t_end, **kwargs))
+            elif self.qf == 'gauss2':
+                xi = [-1./np.sqrt(3.), 1./np.sqrt(3.)]
+                res += dt / 2. * (f(t_mid + dt / 2. * xi[0], **kwargs) + f(t_mid + dt / 2. * xi[1], **kwargs))
+
+            elif self.qf[0:2] == 'gl':  # gauss legendre
+                n = int(self.qf[-1])  # take the order of Gauss Legendre quadr. formula
+                x, w = roots_legendre(n)
+                for i in range(0, n):
+                    res += w[i] * f(((t_end - t_start) / 2) * x[i] + (t_end + t_start) / 2, **kwargs) * (t_end - t_start) / 2
 
         return res
-    
+
     def t_braket(self, phi, psi_t):
         return np.einsum('i, ni->n', np.conj(phi), psi_t)
 
