@@ -51,13 +51,20 @@ class MagnusIntegrator:
         self.order = order
         self.qf = qf
 
-        self.b_n = bernoulli(self.order)
-        self.fac_n = np.array([factorial(n) for n in range(self.order + 1)])
+        b_n = bernoulli(self.order - 1)
+        fac_n = np.array([factorial(n) for n in range(self.order)])
+        self.combfacs = b_n/fac_n
+        print()
+        print('magnus integrator of order', self.order)
+        print('combinatorial factors:')
+        print(self.combfacs)
 
         self.ks = {}
         for n in range(2, self.order + 1):
             for j in range(1, n):
                 self.ks['{}_{}'.format(n, j)] = self.gen_ks(n, j)
+        print('combinatorial indices:')
+        print(self.ks)
 
     def Omega(self):
         Om = self.fOmega(self.T, n=1)
@@ -89,37 +96,26 @@ class MagnusIntegrator:
     def fOmega_p(self, s, n=2):
         omp = 0.
         for j in range(1, n):
-            S_j = 0.
-            # loop over possible variations for given j
-            for k in self.ks['{}_{}'.format(n, j)]:
-                # right sided, nested commutators
-                B_k = self.comm(self.fOmega(s, n=k[0]), self.A(s))
-                # loop through indices in variation
-                for ik in range(1, len(k)):
-                    B_k += self.comm(self.fOmega(s, n=k[ik]), B_k)
+            if self.combfacs[j]!=0.:
+                S_j = 0.
+                # loop over possible variations for given j
+                for k in self.ks['{}_{}'.format(n, j)]:
+                    # right sided, nested commutators
+                    B_k = self.comm(self.fOmega(s, n=k[0]), self.A(s))
+                    # loop through indices in variation
+                    for ik in range(1, len(k)):
+                        B_k += self.comm(self.fOmega(s, n=k[ik]), B_k)
 
-                S_j += B_k
-            # sum over j before integration
-            omp += self.b_n[j] / self.fac_n[j] * S_j
+                    S_j += B_k
+                # sum over j before integration
+                omp += self.combfacs[j] * S_j
         return omp
-
-    def S(self, s, n, j):
-        S_j = 0.
-        # loop over possible variations for given j
-        for k in self.ks['{}_{}'.format(n, j)]:
-            # right sided, nested commutators
-            B_k = self.comm(self.fOmega(s, n=k[0]), self.A(s))
-            # loop through indices in variation
-            for ik in range(1, len(k)):
-                B_k += self.comm(self.fOmega(s, n=k[ik]), B_k)
-
-            S_j += B_k
-        return S_j
 
     def gen_ks(self, n, j):
         # generate possible variations of k which sum to n - 1
         k_range = np.arange(1, n - j + 1)
         k_var = np.array(list(it.product(k_range, repeat=j)))
+        #k_var = np.array(list(it.combinations(k_range, j)))
         if len(k_var) > 0:
             if j < 2:
                 k_var = k_var.reshape((len(k_var), 1))
@@ -127,6 +123,7 @@ class MagnusIntegrator:
 
             mask = k_sum == n - 1
         k_js = k_var[mask]
+        print(k_js)
         return k_js
 
     def comm(self, M1, M2):

@@ -11,7 +11,7 @@ T = 1.
 tau = 0.1
 
 om_max = 15.
-N_om = 100
+N_om = 10
 V0 = np.pi/2.
 V0 = 2. # ~gamma in paper
 
