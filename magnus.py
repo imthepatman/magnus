@@ -28,7 +28,7 @@ def get_example(id='std', **kwargs):
         V0 = kwargs.get('V0', 1.5)
 
         V = lambda t: V0 / np.cosh(t)
-        H = lambda t: V(t) * (sig_x * np.cos(np.pi*om * t) - sig_y * np.sin(np.pi*om * t))
+        H = lambda t: V(t) * (sig_x * np.cos(np.pi * om * t) - sig_y * np.sin(np.pi * om * t))
         y0 = np.array([0., 1.])
         p_ex = lambda t: np.sin(V0 * t) ** 2 / np.cosh(np.pi * om * t / 2.) ** 2
         pm1 = lambda t: np.sin(V0 * t / np.cosh(np.pi * om * t / 2.)) ** 2
@@ -46,25 +46,30 @@ def magnus_ana(t, om, V0):
 
 
 class MagnusIntegrator:
-    def __init__(self, order=2, qf='midpoint'):
+    def __init__(self, order=2, qf='midpoint', explicit_low=False, mute=True):
         # to have gauss Legendre of order n, type qf = 'gln', e.g. 'gl4'
         self.order = order
         self.qf = qf
+        self.explicit_low = explicit_low
+        self.mute = mute
 
         b_n = bernoulli(self.order - 1)
         fac_n = np.array([factorial(n) for n in range(self.order)])
-        self.combfacs = b_n/fac_n
-        print()
-        print('magnus integrator of order', self.order)
-        print('combinatorial factors:')
-        print(self.combfacs)
+        self.combfacs = b_n / fac_n
 
         self.ks = {}
         for n in range(2, self.order + 1):
             for j in range(1, n):
-                self.ks['{}_{}'.format(n, j)] = self.gen_ks(n, j)
-        print('combinatorial indices:')
-        print(self.ks)
+                self.ks['{}_{}'.format(n, j)] = self.k_combs(n, j)
+
+        if not self.mute:
+            print('combinatorial factors and k indices combinations')
+            for n in range(1, self.order + 1):
+                print('n', n)
+                for j in range(1, n):
+                    print('j', j)
+                    print('cf', self.combfacs[j], self.ks['{}_{}'.format(n, j)])
+                print()
 
     def Omega(self):
         Om = self.fOmega(self.T, n=1)
@@ -86,44 +91,48 @@ class MagnusIntegrator:
     ### Auxiliary functions ###
 
     def fOmega(self, s, n=1):
-        if n < 2:
+        if n == 1:
             Om_1 = self.quad(self.A, s)
             return Om_1
-        else:
+        elif not self.explicit_low or n > 3:
             Om_n = self.quad(self.fOmega_p, s, n=n)
             return Om_n
+        else:
+            if n == 2:
+                Om_2 = 0.5 * self.quad(lambda t1: self.comm(self.A(t1), self.quad(self.A, t1)), s)
+                return Om_2
+            elif n == 3:
+                omp_3 = lambda t1, t2, t3: self.comm(self.A(t1), self.comm(self.A(t2), self.A(t3))) + self.comm(self.comm(self.A(t1), self.A(t2)), self.A(t3))
+                Om_3 = 1. / 6. * self.quad(lambda t1: self.quad(lambda t2: self.quad(lambda t3: omp_3(t1, t2, t3), t2), t1), s)
+                return Om_3
 
     def fOmega_p(self, s, n=2):
         omp = 0.
         for j in range(1, n):
-            if self.combfacs[j]!=0.:
+            if self.combfacs[j] != 0.:
                 S_j = 0.
                 # loop over possible variations for given j
                 for k in self.ks['{}_{}'.format(n, j)]:
-                    # right sided, nested commutators
-                    B_k = self.comm(self.fOmega(s, n=k[0]), self.A(s))
                     # loop through indices in variation
+                    # right sided, nested commutators
+                    s_k = self.comm(self.fOmega(s, n=k[0]), self.A(s))
                     for ik in range(1, len(k)):
-                        B_k += self.comm(self.fOmega(s, n=k[ik]), B_k)
-
-                    S_j += B_k
+                        s_k = self.comm(self.fOmega(s, n=k[ik]), s_k)
+                    S_j += s_k
                 # sum over j before integration
                 omp += self.combfacs[j] * S_j
         return omp
 
-    def gen_ks(self, n, j):
+    def k_combs(self, n, j):
         # generate possible variations of k which sum to n - 1
         k_range = np.arange(1, n - j + 1)
         k_var = np.array(list(it.product(k_range, repeat=j)))
-        #k_var = np.array(list(it.combinations(k_range, j)))
         if len(k_var) > 0:
             if j < 2:
                 k_var = k_var.reshape((len(k_var), 1))
             k_sum = np.sum(k_var, axis=1)
-
             mask = k_sum == n - 1
         k_js = k_var[mask]
-        print(k_js)
         return k_js
 
     def comm(self, M1, M2):
@@ -148,7 +157,7 @@ class MagnusIntegrator:
             elif self.qf == 'simpson':
                 res += dt / 6. * (f(t_start, **kwargs) + 4. * f(t_mid, **kwargs) + f(t_end, **kwargs))
             elif self.qf == 'gauss2':
-                xi = [-1./np.sqrt(3.), 1./np.sqrt(3.)]
+                xi = [-1. / np.sqrt(3.), 1. / np.sqrt(3.)]
                 res += dt / 2. * (f(t_mid + dt / 2. * xi[0], **kwargs) + f(t_mid + dt / 2. * xi[1], **kwargs))
 
             elif self.qf[0:2] == 'gl':  # gauss legendre
