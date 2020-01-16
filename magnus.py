@@ -142,7 +142,7 @@ class MagnusIntegrator:
     def quad(self, f, T, **kwargs):
 
         Nt = int((T - self.t0) / self.tau)
-        ts = np.linspace(self.t0, T, Nt, endpoint=True)
+        ts = np.linspace(self.t0, T, Nt + 1, endpoint=True)
 
         res = np.zeros_like(self.A(0.))
         for i in range(1, len(ts)):

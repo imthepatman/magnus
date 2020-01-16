@@ -1,21 +1,28 @@
-from magnus import MagnusIntegrator, get_example, braket
+from magnus import MagnusIntegrator, get_example, braket, sig_x
 import numpy as np
 import matplotlib.pyplot as plt
 
 
 T = 1.
-tau = 0.01
-id = 'rz'
+tau = 0.1
+id = 'rect'
+V0 = 2.
+om = np.pi
 
-A, y0 = get_example(id)
+order = 4
+qf = 'simpson'
 
-mi = MagnusIntegrator(order=2)
+A, y0,_,_ = get_example(id, om=om, V0=V0)
 
-ts, ys = mi.evolve(A, y0, T, tau)
+mi = MagnusIntegrator(order=order, qf=qf)
 
-y_test = np.array([1., -1.]) / np.sqrt(2.)
-y_test = np.array([0., 1.])
-tp = np.abs(mi.t_braket(y_test, ys))
+Nt = int(T/tau)
+ts = np.linspace(0., T, Nt, endpoint=True)
+
+ys = np.zeros((Nt, len(y0)), dtype=np.complex)
+ys[0] = y0
+for i in range(1, Nt):
+    ys[i] = mi.evolve(A, y0=ys[i-1], t0=ts[i-1], T=ts[i], tau=tau)
 
 fig = plt.figure(figsize=(9, 6))
 ax_1 = fig.add_subplot(211)
@@ -24,8 +31,6 @@ ax_2 = fig.add_subplot(212)
 ax_1.plot(ts, np.real(ys[:, 0]), '--', label=r'$Re\{Psi_0\}$')
 ax_1.plot(ts, np.real(ys[:, 1]), ':', label=r'$Re\{Psi_1\}$')
 
-ax_1.plot(ts, tp, '-', label=r'$T$')
-#ax_1.set_xlabel(r'$t$')
 ax_1.legend()
 
 ax_2.plot(ts, np.real(braket(ys, ys)))

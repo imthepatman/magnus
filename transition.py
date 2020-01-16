@@ -2,19 +2,19 @@ from magnus import MagnusIntegrator, get_example, braket, magnus_ana
 import numpy as np
 import matplotlib.pyplot as plt
 
-order_max = 2
-qf = 'gl4'
+order_max = 4
+qf = 'simpson'
 
 example_id = 'rect'
 
 T = 1.
 tau = 0.1
 
-om_max = 3
+om_max = 15
 N_om = 20
 V0 = np.pi/2.
-V0 = 2. # ~gamma in paper
 V0 = 1.5 # ~gamma in paper
+V0 = 2. # ~gamma in paper
 
 
 mis = [MagnusIntegrator(order=i + 1, qf=qf, explicit_low=True) for i in range(order_max)]
