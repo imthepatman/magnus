@@ -27,7 +27,7 @@ def get_example(id='std', **kwargs):
         om = kwargs.get('om', 1.)
         V0 = kwargs.get('V0', 1.5)
 
-        V = lambda t: V0 / np.cosh(t)
+        V = lambda t: V0 / np.cosh(t/np.pi)
         H = lambda t: V(t) * (sig_x * np.cos(np.pi * om * t) - sig_y * np.sin(np.pi * om * t))
         y0 = np.array([0., 1.])
         p_ex = lambda t: np.sin(V0 * t) ** 2 / np.cosh(np.pi * om * t / 2.) ** 2
