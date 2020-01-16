@@ -8,7 +8,7 @@ qf = 'simpson'
 example_id = 'rect'
 
 T = 1.
-tau = 0.1
+n_subint = 10
 
 om_max = 15
 N_om = 20
@@ -32,7 +32,7 @@ for i, om in enumerate(oms):
     tps = []
     tps_ex = []
     for mi in mis:
-        y_next = mi.evolve(A, y0, T, tau=tau)
+        y_next = mi.evolve(A, y0, T, n_subint=n_subint)
         # computing transition probability
         tp = np.abs(np.dot(y_trans, y_next))**2
         tps.append(tp)

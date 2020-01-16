@@ -23,6 +23,9 @@ def get_example(id='std', **kwargs):
         p_ex = lambda t: 4. / (4. + (om / V0) ** 2) * np.sin(np.sqrt(V0 ** 2 + om ** 2 / 4.) * t) ** 2
         pm1 = lambda t: np.sin(2. * V0 / om * np.sin(om / 2. * t)) ** 2 if om != 0. else np.sin(V0) ** 2
 
+        A = lambda t: -1.j * H(t)
+        return A, y0, p_ex, pm1
+
     elif id == 'rz':
         om = kwargs.get('om', 1.)
         V0 = kwargs.get('V0', 1.5)
@@ -33,8 +36,31 @@ def get_example(id='std', **kwargs):
         p_ex = lambda t: np.sin(V0 * t) ** 2 / np.cosh(np.pi * om * t / 2.) ** 2
         pm1 = lambda t: np.sin(V0 * t / np.cosh(np.pi * om * t / 2.)) ** 2
 
-    A = lambda t: -1.j * H(t)
-    return A, y0, p_ex, pm1
+        A = lambda t: -1.j * H(t)
+        return A, y0, p_ex, pm1
+
+
+    elif id=='free':
+        Nx = kwargs.get('Nx', 100)
+        x_min = kwargs.get('x_min', 0.)
+        x_max= kwargs.get('x_max', 1.)
+
+        x0 = kwargs.get('x0', 0.3)
+        sig0 = kwargs.get('sig0', 0.03)
+        k0 = kwargs.get('k0', 50.)
+
+        V0 = kwargs.get('V0', 10.)
+
+        xs = np.linspace(x_min, x_max, Nx, endpoint=True)
+        fd2 = np.diag(-2. * np.ones(Nx)) + np.diag(np.ones(Nx - 1), 1) + np.diag(np.ones(Nx - 1), -1)
+        V = lambda t: np.where(xs>0.6, V0, 0.)
+
+        H = lambda t: -fd2 + V(t)
+
+        y0 = np.exp(-0.5*((xs-x0)/sig0)**2 + 1.j*k0*xs)/(sig0*np.sqrt(2.*np.pi))
+
+        A = lambda t: -1.j * H(t)
+        return A, y0, xs, V
 
 
 def magnus_ana(t, om, V0):
@@ -79,11 +105,11 @@ class MagnusIntegrator:
 
         return Om
 
-    def evolve(self, A, y0, T, tau=0.01, t0=0.):
+    def evolve(self, A, y0, T, n_subint=1, t0=0.):
         self.A = A
         self.t0 = t0
         self.T = T
-        self.tau = tau
+        self.n_subint = n_subint
 
         y_next = expm(self.Omega()) @ y0
         return y_next
@@ -140,9 +166,7 @@ class MagnusIntegrator:
         return c
 
     def quad(self, f, T, **kwargs):
-
-        Nt = int((T - self.t0) / self.tau)
-        ts = np.linspace(self.t0, T, Nt + 1, endpoint=True)
+        ts = np.linspace(self.t0, T, self.n_subint + 1, endpoint=True)
 
         res = np.zeros_like(self.A(0.))
         for i in range(1, len(ts)):
